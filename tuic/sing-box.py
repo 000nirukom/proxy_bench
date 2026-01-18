@@ -5,6 +5,7 @@ import time
 import tempfile
 import os
 import sys
+from typing import Literal
 import uuid
 
 import dotenv
@@ -132,7 +133,19 @@ def terminate_process(p):
 # ─── TUIC config generators ─────────────────────────────────────────
 
 
-def gen_tuic_config(uuid_str, password, server_port, client_port, cert_path, key_path):
+def gen_tuic_config(
+    uuid_str,
+    password,
+    server_port,
+    client_port,
+    cert_path,
+    key_path,
+    tcp_conges: Literal[
+        "new_reno",
+        "cubic",
+        "bbr",
+    ],
+):
     server = {
         "log": {"level": "error", "timestamp": False},
         "inbounds": [
@@ -147,7 +160,7 @@ def gen_tuic_config(uuid_str, password, server_port, client_port, cert_path, key
                         "password": password,
                     }
                 ],
-                "congestion_control": "cubic",  # 可选：bbr / cubic
+                "congestion_control": tcp_conges,
                 "auth_timeout": "3s",
                 "zero_rtt_handshake": True,
                 "tls": {
@@ -180,7 +193,7 @@ def gen_tuic_config(uuid_str, password, server_port, client_port, cert_path, key
                 "server_port": server_port,
                 "uuid": uuid_str,
                 "password": password,
-                "congestion_control": "cubic",
+                "congestion_control": tcp_conges,
                 "zero_rtt_handshake": True,
                 "tls": {
                     "enabled": True,
@@ -248,8 +261,12 @@ def main():
     )
 
     tests = [
-        ("rsa4096", "tuic-tls-rsa4096"),
-        ("ed25519", "tuic-tls-ed25519"),
+        # ("rsa4096", "tuic-tls-rsa4096", "cubic"),
+        # ("ed25519", "tuic-tls-ed25519", "cubic"),
+        ("rsa4096", "tuic-tls-rsa4096", "bbr"),
+        ("ed25519", "tuic-tls-ed25519", "bbr"),
+        ("rsa4096", "tuic-tls-rsa4096", "new_reno"),
+        ("ed25519", "tuic-tls-ed25519", "new_reno"),
     ]
 
     results = []
@@ -268,7 +285,8 @@ def main():
         results.append(("no-proxy", None))
 
     # 逐一測試不同簽名算法下的 TUIC 性能
-    for key_type, test_name in tests:
+    for key_type, test_name, tcp_conges in tests:
+        test_name = f"{test_name}-{tcp_conges}"
         if key_type not in certs:
             print(f"=== {test_name} ===  (跳過 - 證書不可用)")
             results.append((test_name, None))
@@ -280,7 +298,7 @@ def main():
         print(f"\n=== {test_name}  (使用 {key_type} 簽名 TLS) ===")
 
         server_cfg, client_cfg = gen_tuic_config(
-            tuic_uuid, password, sp, cp, cert_path, key_path
+            tuic_uuid, password, sp, cp, cert_path, key_path, tcp_conges
         )
 
         s_path = os.path.join(WORKDIR, f"server-{test_name}.json")
