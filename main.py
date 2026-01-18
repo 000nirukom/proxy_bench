@@ -4,10 +4,11 @@ import subprocess
 import time
 import tempfile
 import os
-import threading
-import socketserver
-import http.server
 import sys
+
+import dotenv
+
+dotenv.load_dotenv()
 
 SINGBOX = "/usr/bin/sing-box"
 OPENSSL = "/usr/bin/openssl"
@@ -16,51 +17,11 @@ CURL = "/usr/bin/curl"
 BASE_CLIENT_PORT = 15000
 BASE_SERVER_PORT = 20000
 
-HTTP_SERVER_PORT = 8000
+HTTP_SERVER_PORT = int(os.environ.get("HTTP_SERVER_PORT", 8089))
 
-DURATION = 12  # 稍微长一点更稳定
 MAX_TEST_BYTES = 8 << 30  # 最多发 8GiB 防止意外
 
 WORKDIR = tempfile.mkdtemp(prefix="sb-bench-")
-
-# ─── HTTP infinite stream server ─────────────────────────────────────
-
-
-class InfiniteHandler(http.server.BaseHTTPRequestHandler):
-    def do_GET(self):
-        if self.path != "/bench":
-            self.send_error(404)
-            return
-
-        self.send_response(200)
-        self.send_header("Content-Type", "application/octet-stream")
-        self.end_headers()
-
-        chunk = b"\0" * (1024 * 1024) * 1  # 1 MiB chunk
-        sent = 0
-
-        try:
-            while sent < MAX_TEST_BYTES:
-                self.wfile.write(chunk)
-                self.wfile.flush()
-                sent += len(chunk)
-        except (BrokenPipeError, ConnectionResetError, OSError):
-            pass
-        except Exception as e:
-            print("HTTP stream error:", e)
-
-    def log_message(self, *args):
-        pass
-
-
-def start_http_server():
-    httpd = socketserver.TCPServer(("127.0.0.1", HTTP_SERVER_PORT), InfiniteHandler)
-    httpd.daemon_threads = True
-    t = threading.Thread(target=httpd.serve_forever, daemon=True)
-    t.start()
-    time.sleep(0.6)
-    return httpd
-
 
 # ─── helpers ─────────────────────────────────────────────────────────
 
@@ -167,21 +128,20 @@ def gen_ss_config(method, password, server_port, client_port):
 # ─── benchmark ───────────────────────────────────────────────────────
 
 
-def run_curl(client_port):
+def run_curl(client_port: int | None):
     cmd = [
         CURL,
         "--silent",
         "--show-error",
         "-o",
         "/dev/null",
-        "-x",
-        f"socks5h://127.0.0.1:{client_port}",
-        "--max-time",
-        str(DURATION + 2),
         f"http://127.0.0.1:{HTTP_SERVER_PORT}/bench",
         "-w",
         "%{speed_download}\\n",
     ]
+    if client_port is not None:
+        cmd.extend(["-x", f"socks5h://127.0.0.1:{client_port}"])
+
     try:
         out = subprocess.check_output(cmd, stderr=subprocess.STDOUT, text=True).strip()
         speed_bps = float(out)
@@ -194,8 +154,6 @@ def run_curl(client_port):
 
 
 def main():
-    httpd = start_http_server()
-
     tests = [
         ("none",),
         ("aes-128-gcm",),
@@ -209,8 +167,18 @@ def main():
     sp = BASE_SERVER_PORT
     cp = BASE_CLIENT_PORT
 
+    print("=== no-proxy ===")
+    speed_mib = run_curl(None)
+    if speed_mib is not None:
+        gbps = speed_mib * 8 / 1000
+        print(f"  {speed_mib:6.1f} MiB/s   ≈ {gbps:5.2f} Gbps")
+        results.append(("no-proxy", speed_mib))
+    else:
+        print("  FAILED")
+        results.append(("no-proxy", None))
+
     for (method,) in tests:
-        print(f"\n=== {method} ===")
+        print(f"=== {method} ===")
         password = get_pwd_for_method(method)
 
         server_cfg, client_cfg = gen_ss_config(method, password, sp, cp)
@@ -253,9 +221,6 @@ def main():
         time.sleep(0.4)  # 给端口释放一点时间
         sp += 2
         cp += 2
-
-    httpd.shutdown()
-    httpd.server_close()
 
     print("\n" + "=" * 40)
     print("           SUMMARY")
