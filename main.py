@@ -10,16 +10,14 @@ import dotenv
 
 dotenv.load_dotenv()
 
-SINGBOX = "/usr/bin/sing-box"
-OPENSSL = "/usr/bin/openssl"
-CURL = "/usr/bin/curl"
+SINGBOX = "sing-box"
+OPENSSL = "openssl"
+CURL = "curl"
 
 BASE_CLIENT_PORT = 15000
 BASE_SERVER_PORT = 20000
 
 HTTP_SERVER_PORT = int(os.environ.get("HTTP_SERVER_PORT", 8089))
-
-MAX_TEST_BYTES = 8 << 30  # 最多发 8GiB 防止意外
 
 WORKDIR = tempfile.mkdtemp(prefix="sb-bench-")
 
@@ -134,7 +132,7 @@ def run_curl(client_port: int | None):
         "--silent",
         "--show-error",
         "-o",
-        "/dev/null",
+        "/dev/null" if os.name == "posix" else "NUL",
         f"http://127.0.0.1:{HTTP_SERVER_PORT}/bench",
         "-w",
         "%{speed_download}\\n",

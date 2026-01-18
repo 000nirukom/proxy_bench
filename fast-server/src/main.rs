@@ -26,6 +26,12 @@ async fn main() -> anyhow::Result<()> {
         MAX_SEND_BYTES.store(bytes, Ordering::Release);
     }
 
+    let bytes = MAX_SEND_BYTES.load(Ordering::Acquire);
+    println!(
+        "Send size: {} ({bytes} bytes)",
+        humansize::format_size(bytes, humansize::BINARY,)
+    );
+
     let listener = compio::net::TcpListener::bind(("127.0.0.1", port)).await?;
     println!("HTTP server running on 127.0.0.1:{}", port);
 
