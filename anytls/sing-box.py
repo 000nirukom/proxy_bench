@@ -25,7 +25,7 @@ WORKDIR = tempfile.mkdtemp(prefix="sb-anytls-bench-")
 # ─── helpers ─────────────────────────────────────────────────────────
 
 
-def run_openssl(cmd, capture_stderr=False):
+def run_openssl(cmd, capture_stderr=True):
     try:
         kwargs = {}
         if capture_stderr:
