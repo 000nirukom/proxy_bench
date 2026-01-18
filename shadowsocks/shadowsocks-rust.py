@@ -200,3 +200,10 @@ if __name__ == "__main__":
     except KeyboardInterrupt:
         print("\nInterrupted.")
         sys.exit(1)
+    finally:
+        try:
+            import shutil
+
+            shutil.rmtree(WORKDIR, ignore_errors=True)
+        except Exception:
+            pass
