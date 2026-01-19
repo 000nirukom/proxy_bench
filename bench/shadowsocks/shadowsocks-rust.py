@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 import subprocess
 import time
-import tempfile
 import os
 import sys
 
@@ -14,12 +13,10 @@ SSLOCAL = "sslocal"
 OPENSSL = "openssl"
 CURL = "curl"
 
-BASE_CLIENT_PORT = 15000
-BASE_SERVER_PORT = 20000
+BASE_CLIENT_PORT = 51000
+BASE_SERVER_PORT = 52000
 
 HTTP_SERVER_PORT = int(os.environ.get("HTTP_SERVER_PORT", 8089))
-
-WORKDIR = tempfile.mkdtemp(prefix="ssrust-bench-")
 
 # ─── helpers ─────────────────────────────────────────────────────────
 
@@ -85,7 +82,12 @@ def run_curl(client_port: int | None):
         cmd.extend(["-x", f"socks5h://127.0.0.1:{client_port}"])
 
     try:
-        out = subprocess.check_output(cmd, stderr=subprocess.STDOUT, text=True).strip()
+        out = subprocess.check_output(
+            cmd,
+            stderr=subprocess.STDOUT,
+            text=True,
+            env={},
+        ).strip()
         speed_bps = float(out)
         return speed_bps / (1024 * 1024)
     except Exception as e:
@@ -200,10 +202,3 @@ if __name__ == "__main__":
     except KeyboardInterrupt:
         print("\nInterrupted.")
         sys.exit(1)
-    finally:
-        try:
-            import shutil
-
-            shutil.rmtree(WORKDIR, ignore_errors=True)
-        except Exception:
-            pass

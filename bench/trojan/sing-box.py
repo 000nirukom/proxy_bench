@@ -210,7 +210,12 @@ def run_curl(client_port: int | None):
         cmd.extend(["-x", f"socks5h://127.0.0.1:{client_port}"])
 
     try:
-        out = subprocess.check_output(cmd, stderr=subprocess.STDOUT, text=True).strip()
+        out = subprocess.check_output(
+            cmd,
+            stderr=subprocess.STDOUT,
+            text=True,
+            env={},
+        ).strip()
         speed_bps = float(out)
         return speed_bps / (1024 * 1024)
     except Exception as e:
